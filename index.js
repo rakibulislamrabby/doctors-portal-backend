@@ -30,15 +30,26 @@ function verifyjwt(req, res, next) {
 }
 
 async function run() {
-    await client.connect();
-    const serviceCollection = client.db("doctors_portal").collection("services");
-    const bookingCollection = client.db("doctors_portal").collection("bookings");
-    const usersCollection = client.db("doctors_portal").collection("users");
-
     try {
+        await client.connect();
+        const serviceCollection = client.db("doctors_portal").collection("services");
+        const bookingCollection = client.db("doctors_portal").collection("bookings");
+        const usersCollection = client.db("doctors_portal").collection("users");
+        const doctorsCollection = client.db("doctors_portal").collection("doctors");
+
+        const verifyAdmin = async (req, res, next) => {
+            const requester = req.decoded.email;
+            const requestedAccount = await usersCollection.findOne({ email: requester });
+            if (requestedAccount.role === "admin") {
+                next();
+            }
+            else {
+                res.status(403).send({ message: "Forbbidden" })
+            }
+        }
         app.get("/service", async (req, res) => {
             const query = {};
-            const cursor = serviceCollection.find(query);
+            const cursor = serviceCollection.find(query).project({ name: 1 });
             const services = await cursor.toArray();
             res.send(services);
         })
@@ -53,21 +64,17 @@ async function run() {
             const isAdmin = user.role === "admin";
             res.send({ admin: isAdmin });
         })
-        app.put("/user/admin/:email", verifyjwt, async (req, res) => {
+        app.put("/user/admin/:email", verifyjwt, verifyAdmin, async (req, res) => {
             const email = req.params.email;
-            const requester = req.decoded.email;
-            const requestedAccount = await usersCollection.findOne({ email: requester })
-            if (requestedAccount.role === "admin") {
-                const filter = { email: email };
-                const updateDoc = {
-                    $set: { role: "admin" },
-                };
-                const result = await usersCollection.updateOne(filter, updateDoc);
-                res.send(result);
-            }
-            else {
-                res.status(403).send({ message: "Forbbidden" })
-            }
+            // const requester = req.decoded.email;
+            // const requestedAccount = await usersCollection.findOne({ email: requester })
+            // if (requestedAccount.role === "admin") {
+            const filter = { email: email };
+            const updateDoc = {
+                $set: { role: "admin" },
+            };
+            const result = await usersCollection.updateOne(filter, updateDoc);
+            res.send(result);
 
         });
 
@@ -109,7 +116,8 @@ async function run() {
                 service.slots = available;
             });
             res.send(services);
-        })
+        });
+
 
         /**
     * API Naming Convention
@@ -145,6 +153,23 @@ async function run() {
             const result = await bookingCollection.insertOne(booking);
             return res.send({ success: true, result });
         });
+
+        app.get("/doctor", verifyjwt, verifyAdmin, async (req, res) => {
+            const doctors = await doctorsCollection.find().toArray();
+            res.send(doctors);
+
+        })
+        app.post("/doctor", verifyjwt, verifyAdmin, async (req, res) => {
+            const doctor = req.body;
+            const result = await doctorsCollection.insertOne(doctor);
+            res.send(result);
+        })
+        app.delete("/doctor/:email", verifyjwt, verifyAdmin, async (req, res) => {
+            const email = req.params.email;
+            const filter = { email: email }
+            const result = await doctorsCollection.deleteOne(filter);
+            res.send(result);
+        })
 
     }
     finally {
