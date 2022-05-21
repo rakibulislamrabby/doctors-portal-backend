@@ -175,9 +175,10 @@ async function run() {
             const result = await bookingCollection.insertOne(booking);
             return res.send({ success: true, result });
         });
-        app.patch("/booking/:id", async (req, res) => {
+        app.patch('/booking/:id', verifyjwt, async (req, res) => {
             const id = req.params.id;
             const payment = req.body;
+            console.log(payment);
             const filter = { _id: ObjectId(id) };
             const updatedDoc = {
                 $set: {
